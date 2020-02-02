@@ -1,210 +1,180 @@
 package com.example.musicplayer;
 
+//AndroidX
+
+import android.Manifest;
+import android.content.ContentResolver;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.os.Build;
+import android.os.Bundle;
+import android.provider.MediaStore;
+import android.widget.ListView;
+import android.widget.Toast;
+
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
-import android.content.Context;
-import android.content.Intent;
-import android.media.MediaPlayer;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.Message;
-import android.view.View;
-import android.widget.Button;
-import android.widget.SeekBar;
-import android.widget.TextView;
+import java.util.ArrayList;
+import java.util.List;
 
-import java.io.File;
+//import android.support.v7.app.AppCompatActivity;
+
 
 public class MainActivity extends AppCompatActivity {
+    List<Music> mMusicList;
+    MusicAdapter mMusicAdapter;
+    ListView mListView;
 
-    private Button playBtn;
-    private SeekBar positionBar;
-    private SeekBar volumeBar;
-    private TextView elapsedTimeLabel;
-    private TextView remainingTimeLabel;
-    private MediaPlayer mp;
-    private int totalTime;
-    private int currrentMusic = 1;
-    private int[] a = new int[4];
-    TextView textView;
+    private final int REQUEST_PERMISSION = 10;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         setContentView(R.layout.activity_main);
 
-        for (int i = 0; i < a.length; i++) {
-            a[i] = getResources().getIdentifier("music" + i, "raw", getPackageName());
-        }
+        checkPermission();
+        mMusicList = new ArrayList<>();
+//        TextView textView = findViewById(R.id.text_view);
 
-        playBtn = findViewById(R.id.playBtn);
-        elapsedTimeLabel = findViewById(R.id.elapsedTimeLabel);
-        remainingTimeLabel = findViewById(R.id.remainingTimeLabel);
-//音楽フォルダのセット
-        mp = MediaPlayer.create(this,a[0]);
-        mp.setLooping(true);
-        mp.seekTo(0);
-        mp.setVolume(3f, 3f);
-        totalTime = mp.getDuration();
-//positionBarr
-        positionBar = findViewById(R.id.positionBar);
-        positionBar.setMax(totalTime);
-        positionBar.setOnSeekBarChangeListener(
-                new SeekBar.OnSeekBarChangeListener() {
-                    @Override
-                    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                        if (fromUser) {
-                            mp.seekTo(progress);
-                            positionBar.setProgress(progress);
-                        }
-                    }
+        mListView = findViewById(R.id.list);
 
-                    @Override
-                    public void onStartTrackingTouch(SeekBar seekBar) {
+        loadMusics();
 
-                    }
+        mMusicAdapter = new MusicAdapter(this, R.layout.music, mMusicList);
+        mListView.setAdapter(mMusicAdapter);
 
-                    @Override
-                    public void onStopTrackingTouch(SeekBar seekBar) {
+//        if (mMusicList.size() > 0) textView.setText(mMusicList.get(0).title);
+    }
 
-                    }
-                }
-        );
+    //ContentProviderからmusicListにデータを集める
+    private void loadMusics() {
+        ContentResolver contentResolver = getContentResolver();
+        Cursor cursor = null;
+        StringBuilder sb = null;
+        // true: images, false:audio
+        boolean flg = false;
 
 
-//volumeBar
-        volumeBar =
-
-                findViewById(R.id.volumeBar);
-        volumeBar.setOnSeekBarChangeListener(
-                new SeekBar.OnSeekBarChangeListener() {
-                    @Override
-                    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                        float volumeNum = progress / 100f;
-                        mp.setVolume(volumeNum, volumeNum);
-                    }
-
-                    @Override
-                    public void onStartTrackingTouch(SeekBar seekBar) {
-
-                    }
-
-                    @Override
-                    public void onStopTrackingTouch(SeekBar seekBar) {
-
-                    }
-                }
-        );
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while (mp != null) {
-                    try {
-                        Message msg = new Message();
-                        msg.what = mp.getCurrentPosition();
-                        handler.sendMessage(msg);
-                        Thread.sleep(1000);
-                    } catch (InterruptedException e) {
-                    }
-                }
+        // 例外を受け取る
+        try {
+            if (flg) {
+                // images
+                cursor = contentResolver.query(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        null, null, null, null);
+            } else {
+                // audio
+                cursor = contentResolver.query(
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, null,
+                        null, null, null);
             }
-        }).start();
-    }
 
-    //時間の計算
-    private Handler handler = new Handler(new Handler.Callback() {
-        @Override
-        public boolean handleMessage(Message msg) {
-            int currentPosition = msg.what;
+            if (cursor != null && cursor.moveToFirst()) {
+                String str = String.format(
+                        "MediaStore.Images = %s\n\n", cursor.getCount());
 
-            positionBar.setProgress(currentPosition);
+                sb = new StringBuilder(str);
 
-            String elapsedTime = createTimeLabel(currentPosition);
-            elapsedTimeLabel.setText(elapsedTime);
+                do {
 
-            String remainingTime = "- " + createTimeLabel(totalTime - currentPosition);
-            remainingTimeLabel.setText(remainingTime);
+                    String id = cursor.getString(cursor.getColumnIndex(
+                            MediaStore.Images.Media._ID));
+                    String title = cursor.getString(cursor.getColumnIndex(
+                            MediaStore.Images.Media.TITLE));
+                    String uri = (cursor.getString(cursor.getColumnIndex(
+                            MediaStore.Images.Media._ID)));
+                    Music music = new Music(id, title, uri);
 
-            return true;
+                    mMusicList.add(music);
+
+
+//                    sb.append("ID: ");
+//                    sb.append(cursor.getString(cursor.getColumnIndex(
+//                            MediaStore.Images.Media._ID)));
+//                    sb.append("\n");
+                    sb.append("Title: ");
+                    sb.append(cursor.getString(cursor.getColumnIndex(
+                            MediaStore.Images.Media.TITLE)));
+//                    sb.append("\n");
+//                    sb.append("Path: ");
+//                    sb.append(cursor.getString(cursor.getColumnIndex(
+//                            MediaStore.Images.Media.DATA)));
+                    sb.append("\n\n");
+
+                } while (cursor.moveToNext());
+
+                cursor.close();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+
+            Toast toast = Toast.makeText(this,
+                    "例外が発生、Permissionを許可していますか？", Toast.LENGTH_SHORT);
+            toast.show();
+
+            //MainActivityに戻す
+            finish();
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
         }
-    });
 
-    //時間
-    public String createTimeLabel(int time) {
-        String timeLabel = "";
-        int min = time / 1000 / 60;
-        int sec = time / 1000 % 60;
-
-        timeLabel = min + ":";
-        if (sec < 10) timeLabel += "0";
-        timeLabel += sec;
-
-        return timeLabel;
+        // ここまで実行されれば、端末の全部の音楽データがmusicListに入るはず
+//        textView.setText(sb);
     }
 
+    // Permissionの確認
+    public void checkPermission() {
+        // 既に許可している
+        if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                PackageManager.PERMISSION_GRANTED) {
+            Toast toast = Toast.makeText(this,
+                    "ok", Toast.LENGTH_SHORT);
+            toast.show();
+        }
+        // 拒否していた場合
+        else {
+            requestLocationPermission();
+        }
+    }
 
-    public void playBtnClick(View view) {
-        if (!mp.isPlaying()) {
-            mp.start();
-            playBtn.setBackgroundResource(R.drawable.stop);
+    // 許可を求める
+    private void requestLocationPermission() {
+        if (shouldShowRequestPermissionRationale(
+                Manifest.permission.READ_EXTERNAL_STORAGE)) {
+            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
+                    REQUEST_PERMISSION);
 
         } else {
-            mp.pause();
-            playBtn.setBackgroundResource(R.drawable.play);
+            Toast toast = Toast.makeText(this,
+                    "許可されないとアプリが実行できません", Toast.LENGTH_SHORT);
+            toast.show();
+
+            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE,},
+                    REQUEST_PERMISSION);
+
         }
     }
 
-    public void nextBtnClick(View view) {
-        currrentMusic += 1;
-        if (currrentMusic >= 4) {
-            currrentMusic = 0;
+    // 結果の受け取り
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        if (requestCode == REQUEST_PERMISSION) {
+            // 使用が許可された
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast toast = Toast.makeText(this,
+                        "ok", Toast.LENGTH_SHORT);
+                toast.show();
+            } else {
+                // それでも拒否された時の対応
+                Toast toast = Toast.makeText(this,
+                        "これ以上なにもできません", Toast.LENGTH_SHORT);
+                toast.show();
+            }
         }
-        mp.stop();
-        mp = MediaPlayer.create(this, a[currrentMusic]);
-        mp.setLooping(true);
-        mp.seekTo(0);
-        mp.setVolume(3f, 3f);
-        totalTime = mp.getDuration();
-        mp.start();
     }
-
-    //    a[i] = getResources().getIdentifier("music" + i, "raw", getPackageName());
-    public void reverseBtnClick(View view) {
-        currrentMusic -= 1;
-        if (currrentMusic <= -1) {
-            currrentMusic = 3;
-        }
-        mp.stop();
-        mp = MediaPlayer.create(this, a[currrentMusic]);
-        mp.setLooping(true);
-        mp.seekTo(0);
-        mp.setVolume(3f, 3f);
-        totalTime = mp.getDuration();
-        mp.start();
-    }
-
-    public void go2List(View v) {
-        Intent intent = new Intent(this, ListActivity.class);
-        startActivity(intent);
-    }
-
 }
-//外部ストレージを読み込む
-//if (isExternalStorageReadable()) {
-// FileInputStream inputStream;
-// byte[] buffer = new byte[256];
-//
-// // ※以下、例外処理は省略
-//
-// File file = new File(getExternalFilesDir(null), "myfile.txt");
-//
-// if (file.exists()) {
-//  inputStream = new FileInputStream(file);
-//  inputStream.read(buffer);
-//
-//  String data = new String(buffer, "UTF-8");
-//
-//  inputStream.close();
-// }
-//}
